@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import { audit, parseArgs } from '../src/audit.js'
 
-const usage = `Vite Route Sentinel — smoke-check a built Vite app in Chromium
+const usage = `Page Sentinel — audit a built static site in Chromium
 
-Usage: vite-route-sentinel [project-directory] [--route /path [--expect selector]...]... [--out directory] [--timeout ms]
+Usage: page-sentinel [static-directory] [--route /path [--expect selector]...]... [--spa] [--out directory] [--timeout ms]
 
-Routes are relative to the Vite base path. Default: /.
+Routes start at the site root. Default: /.
+--spa serves index.html for missing document paths; other missing files return 404.
 Each --expect checks for a visible element on the preceding --route.
-Reports and screenshots default to <project-directory>/.route-sentinel/.
-Exit codes: 0 clean, 1 browser finding, 2 usage/build/browser failure.
+Reports and screenshots default to <static-directory>/.page-sentinel/.
+Exit codes: 0 clean, 1 browser finding, 2 usage/site/browser failure.
 Run "npx playwright install chromium" once before the first audit.`
 
 async function main() {

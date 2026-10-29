@@ -1,22 +1,24 @@
-# Vite Route Sentinel
+# Page Sentinel
 
-Build a local Vite website, open its production preview in Chromium, and check the routes you name. Each route gets a screenshot and a JSON record of navigation, same-origin HTTP errors, failed requests, mis-served assets, and browser console or JavaScript errors. A clean route does not mask a broken one.
+Audit a **built static website directory** in Chromium. For each route you name, Page Sentinel saves a screenshot and a JSON report with document status, same-origin HTTP errors, failed requests, mis-served assets, browser console errors, JavaScript exceptions and missing visible content. A healthy route cannot hide another route's findings.
 
-This is an original integration of the public APIs of [Vite](https://github.com/vitejs/vite) (MIT) and [Playwright](https://github.com/microsoft/playwright) (Apache-2.0). It does not copy their source, assets, or branding. It targets Node.js developers and CI workflows, not an arbitrary public website crawler.
+The tool uses Node.js's built-in loopback HTTP server and the [Playwright](https://github.com/microsoft/playwright) browser library (Apache-2.0). No third-party build system is required. Source is original; it does not vendor browser or server source.
 
 ## Install and run
 
-Requires Node.js `^20.19.0 || >=22.12.0` and a supported Chromium installation:
+Requires Node.js `^20.19.0 || >=22.12.0` and Chromium:
 
 ```sh
-npm install
+npm ci
 npx playwright install chromium
-node bin/sentinel.js path/to/vite-project --route / --expect 'h1:has-text("Home")' --route /settings --expect '[data-testid="settings"]' --out path/to/report
+node bin/sentinel.js path/to/built-site --route / --expect 'h1:has-text("Home")' --route /settings.html --expect '[data-testid="settings"]' --out path/to/report
 ```
 
-For a local installation within the target project, `npm install --save-dev vite-route-sentinel` can be used once the package is published to a registry; this repository is currently distributed as source on GitHub. You can also invoke the entry point from an `npm` script. `--route` is repeatable and defaults to `/`. Each `--expect` belongs to the preceding `--route`; multiple visible-element selectors can be required per route. Routes are relative to the Vite `base` path: with `base: '/app/'`, `--route /settings` checks `/app/settings`. `--timeout` sets each navigation, selector and screenshot timeout in milliseconds (default 15000; range 1–120000). `--help` prints the CLI usage.
+Supply the directory **after** building your site with your own workflow; this tool neither modifies that directory nor runs project build scripts. The checked-in `test/spa-fixture` directory is a small ready-to-run example. `--route` is repeatable and defaults to `/`. Each `--expect` belongs to the preceding route and requires a visible element; repeat it for multiple conditions. `--timeout` sets navigation, selector and screenshot timeouts in milliseconds (default 15000; range 1–120000). `--help` prints usage.
 
-Unless `--out` is supplied, results are written to `<project>/.route-sentinel/report.json` and numbered screenshots under `screenshots/`. Add that directory to the target project's `.gitignore`; screenshots may contain sensitive on-screen information. Vite's configured production build output is generated or replaced by the usual `vite build` behavior.
+By default, a missing file responds with HTTP 404. For a static single-page app, add `--spa`: missing **document** requests receive `index.html` and status 200. In that mode, use a route-specific `--expect` to distinguish a valid page from a home-page fallback. Missing images, scripts, stylesheets and fonts do not use this fallback. A genuine 200 response containing the wrong content produces an `assertion` finding.
+
+Unless `--out` is supplied, results go to `<static-directory>/.page-sentinel/report.json` with numbered screenshots under `screenshots/`. Keep screenshots out of version control: they may contain sensitive page content.
 
 ```json
 {
@@ -28,13 +30,7 @@ Unless `--out` is supplied, results are written to `<project>/.route-sentinel/re
 }
 ```
 
-Exit status: `0` when every route has no findings, `1` for findings, `2` for an invalid invocation, build error, or browser setup failure. The CLI prints a route-by-route summary and the report path. Requests to hosts other than the loopback preview origin are blocked; service workers are disabled for repeatable local checks. Third-party dependencies can consequently cause browser console errors, which are reported rather than hidden.
-
-**Scope:** This checks only the routes explicitly named. Vite may serve a missing SPA route with HTTP 200; it cannot prove that a client-side route exists from status alone. Use `--expect` to require content unique to that route; missing content produces an `assertion` finding even when the HTTP response is 200. The audit also detects images that fail to decode and HTML sent instead of an image, script, stylesheet or font, including SPA fallback responses. It does not log in, click through a page, wait for asynchronous work after the load event (apart from `--expect`), or validate remote APIs. The route's own JavaScript can still modify page state; only run trusted local Vite projects.
-
-### Source-backed behavior
-
-The [Vite source checkout](https://github.com/vitejs/vite/tree/cce559ab158cc6b177d0911a0bea73436b48faff) was downloaded and rebuilt locally. Its [preview middleware](https://github.com/vitejs/vite/blob/cce559ab158cc6b177d0911a0bea73436b48faff/packages/vite/src/node/preview.ts#L284-L295) installs the [SPA HTML fallback](https://github.com/vitejs/vite/blob/cce559ab158cc6b177d0911a0bea73436b48faff/packages/vite/src/node/server/middlewares/htmlFallback.ts#L80-L83). An unknown path on a minimal SPA returned the home page with status 200. That is intentional Vite behavior, **not a Vite bug**; the initial Sentinel audit mistakenly treated it as sufficient evidence that the route was healthy. `--expect` adds a user-specified visible-content contract without guessing a framework's routing rules. No upstream source was copied or republished.
+Exit status: `0` for clean routes, `1` for browser findings, `2` for invalid invocation, site access or browser setup errors. The server binds only to `127.0.0.1`, refuses private paths and symlinks outside the supplied directory, blocks third-party browser requests and disables service workers. External dependencies may consequently raise browser console errors; these are recorded, not hidden. **Only audit trusted local sites:** page JavaScript runs in the browser. The tool checks only explicit routes; it does not authenticate, click through a UI, run a dynamic backend, wait for unrelated asynchronous work after load, or validate remote APIs.
 
 ## Develop
 
@@ -43,7 +39,7 @@ npm ci
 npx playwright install chromium
 npm run check
 npm test
-node bin/sentinel.js test/spa-fixture --route /absent --expect 'h1:has-text("Missing route")' --timeout 3000
+node bin/sentinel.js test/spa-fixture --spa --route /absent --expect 'h1:has-text("Missing route")' --timeout 3000
 ```
 
-The integration tests exercise built Vite fixtures and real Chromium, including a healthy route, a broken image returned as a 200 HTML fallback, and a missing SPA route that needs a content assertion. CI installs Chromium before running them.
+The tests launch real Chromium for a healthy page, broken asset and missing single-page route. The loopback server tests also check private paths and fallback rules. CI installs Chromium before testing.

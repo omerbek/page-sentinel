@@ -8,21 +8,21 @@ import { audit, parseArgs, routeUrl } from '../src/audit.js'
 
 const fixture = fileURLToPath(new URL('./fixture/', import.meta.url))
 
-test('route validation prevents escaping the configured Vite base', () => {
-  const base = new URL('http://127.0.0.1:1234/sample/')
+test('route validation confines requests to the local site', () => {
+  const base = new URL('http://127.0.0.1:1234/')
   assert.equal(routeUrl('/clean.html?mode=test', base).href, `${base}clean.html?mode=test`)
-  for (const route of ['https://other.test/', '//other.test/', '/../../outside', '/\\other.test']) {
+  for (const route of ['https://other.test/', '//other.test/', '/../../outside', '/%2e%2e/outside', '/\\other.test']) {
     assert.throws(() => routeUrl(route, base))
   }
   assert.deepEqual(parseArgs(['site', '--route', '/clean.html', '--route', '/']), {
-    root: 'site', routes: ['/clean.html', '/'], expected: [[], []], out: undefined, timeout: 15000,
+    root: 'site', routes: ['/clean.html', '/'], expected: [[], []], spa: false, out: undefined, timeout: 15000,
   })
   assert.throws(() => parseArgs(['--timeout', 'NaN']))
   assert.throws(() => parseArgs(['--expect', 'h1']), /must follow --route/)
 })
 
-test('audits built pages in a real browser, retaining route-specific findings', async () => {
-  const out = await mkdtemp(path.join(os.tmpdir(), 'vite-route-sentinel-'))
+test('audits static pages in a real browser, retaining route-specific findings', async () => {
+  const out = await mkdtemp(path.join(os.tmpdir(), 'page-sentinel-'))
   try {
     const { report } = await audit({
       root: fixture,
@@ -34,7 +34,7 @@ test('audits built pages in a real browser, retaining route-specific findings', 
     assert.equal(report.pages[0].status, 200)
     assert.deepEqual(report.pages[0].findings, [])
     assert.equal(report.pages[1].status, 200)
-    assert.ok(report.pages[1].findings.some((f) => f.kind === 'asset' && f.message === 'HTML served instead of an asset' && f.url.endsWith('/missing.png')))
+    assert.ok(report.pages[1].findings.some((f) => f.kind === 'http' && f.message === 'HTTP 404' && f.url.endsWith('/missing.png')))
     assert.ok(report.pages[1].findings.some((f) => f.kind === 'console' && f.message === 'intentional console error'))
     const persisted = JSON.parse(await readFile(path.join(out, 'report.json'), 'utf8'))
     assert.deepEqual(persisted, report)

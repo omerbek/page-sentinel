@@ -1,25 +1,37 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { chromium } from 'playwright'
-import { build, preview } from 'vite'
+import { startSite } from './server.js'
 
 export function routeUrl(route, baseUrl) {
   if (!route.startsWith('/') || route.startsWith('//') || route.includes('\\')) {
     throw new Error(`Route must be a local path starting with one slash: ${route}`)
   }
-  const url = new URL(route.slice(1), baseUrl)
-  if (url.origin !== baseUrl.origin || !url.pathname.startsWith(baseUrl.pathname)) {
-    throw new Error(`Route escapes the Vite base path: ${route}`)
+  let decoded
+  try {
+    decoded = decodeURIComponent(route.split(/[?#]/, 1)[0])
+  } catch {
+    throw new Error(`Invalid route encoding: ${route}`)
   }
+  if (decoded.includes('\\') || decoded.includes('\0') ||
+    decoded.split('/').some((segment) => segment === '.' || segment === '..')) {
+    throw new Error(`Route escapes the local site: ${route}`)
+  }
+  const url = new URL(route, baseUrl)
+  if (url.origin !== baseUrl.origin) throw new Error(`Route escapes the local site: ${route}`)
   return url
 }
 
 export function parseArgs(argv) {
-  const options = { root: '.', routes: [], expected: [], out: undefined, timeout: 15000 }
+  const options = { root: '.', routes: [], expected: [], spa: false, out: undefined, timeout: 15000 }
   let rootSet = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--help' || arg === '-h') return { help: true }
+    if (arg === '--spa') {
+      options.spa = true
+      continue
+    }
     if (arg === '--route' || arg === '--expect' || arg === '--out' || arg === '--timeout') {
       const value = argv[++i]
       if (!value || value.startsWith('--')) throw new Error(`${arg} needs a value`)
@@ -63,25 +75,16 @@ function sameOrigin(url, origin) {
   }
 }
 
-export async function audit(options, deps = { build, preview, chromium }) {
+export async function audit(options, deps = { chromium }) {
   const root = path.resolve(options.root)
-  const out = path.resolve(options.out ?? path.join(root, '.route-sentinel'))
+  const out = path.resolve(options.out ?? path.join(root, '.page-sentinel'))
   let server
   let browser
   try {
-    await deps.build({ root, logLevel: 'error' })
-    server = await deps.preview({
-      root,
-      logLevel: 'error',
-      preview: { host: '127.0.0.1', port: 0, strictPort: false },
-    })
-    const address = server.httpServer.address()
-    if (!address || typeof address === 'string') throw new Error('Preview did not bind a TCP port')
-    const base = server.config.decodedBase
-    if (!base.startsWith('/') || !base.endsWith('/')) {
-      throw new Error('Only path-based Vite base URLs are supported')
-    }
-    const baseUrl = new URL(`http://127.0.0.1:${address.port}${base}`)
+    server = await startSite(root, { spa: options.spa })
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Local site did not bind a TCP port')
+    const baseUrl = new URL(`http://127.0.0.1:${address.port}/`)
     const urls = options.routes.map((route) => routeUrl(route, baseUrl))
     browser = await deps.chromium.launch()
     const context = await browser.newContext({ serviceWorkers: 'block' })
@@ -137,7 +140,7 @@ export async function audit(options, deps = { build, preview, chromium }) {
         status = response?.status() ?? null
         if (!response) add('navigation', url.href, 'Navigation returned no document')
         if (page.url() !== url.href && !sameOrigin(page.url(), baseUrl.origin)) {
-          add('navigation', url.href, 'Redirected outside the local preview')
+          add('navigation', url.href, 'Redirected outside the local site')
         }
         const brokenImages = await page.locator('img').evaluateAll((images) =>
           images.filter((image) => image.complete && image.naturalWidth === 0)
@@ -176,7 +179,7 @@ export async function audit(options, deps = { build, preview, chromium }) {
     if (browser) await browser.close()
     if (server) {
       await new Promise((resolve, reject) => {
-        server.httpServer.close((error) => error ? reject(error) : resolve())
+        server.close((error) => error ? reject(error) : resolve())
       })
     }
   }

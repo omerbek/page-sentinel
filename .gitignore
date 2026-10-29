@@ -1,5 +1,4 @@
 node_modules/
-.route-sentinel/
+.page-sentinel/
 dist/
-test/fixture/dist/
 *.log

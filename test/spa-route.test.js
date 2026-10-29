@@ -9,13 +9,13 @@ import { audit, parseArgs } from '../src/audit.js'
 const fixture = fileURLToPath(new URL('./spa-fixture/', import.meta.url))
 
 test('a missing SPA route fails its own visible-content expectation despite HTTP 200', async () => {
-  const out = await mkdtemp(path.join(os.tmpdir(), 'vite-route-sentinel-spa-'))
+  const out = await mkdtemp(path.join(os.tmpdir(), 'page-sentinel-spa-'))
   try {
     const options = parseArgs([
       fixture,
       '--route', '/', '--expect', 'h1:has-text("Home route")',
       '--route', '/absent', '--expect', 'h1:has-text("Missing route")',
-      '--timeout', '3000', '--out', out,
+      '--spa', '--timeout', '3000', '--out', out,
     ])
     const { report } = await audit(options)
     assert.equal(report.passed, false)
