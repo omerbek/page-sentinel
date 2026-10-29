@@ -1,0 +1,21 @@
+{
+  "name": "vite-route-sentinel",
+  "version": "0.1.0",
+  "description": "Local browser smoke checks for built Vite routes",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "bin": {
+    "vite-route-sentinel": "./bin/sentinel.js"
+  },
+  "scripts": {
+    "test": "node --test test/audit.test.js",
+    "check": "node --check bin/sentinel.js && node --check src/audit.js && node --check test/audit.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.64.1",
+    "vite": "^8.3.5"
+  }
+}
