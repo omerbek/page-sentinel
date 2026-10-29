@@ -15,9 +15,10 @@ test('route validation prevents escaping the configured Vite base', () => {
     assert.throws(() => routeUrl(route, base))
   }
   assert.deepEqual(parseArgs(['site', '--route', '/clean.html', '--route', '/']), {
-    root: 'site', routes: ['/clean.html', '/'], out: undefined, timeout: 15000,
+    root: 'site', routes: ['/clean.html', '/'], expected: [[], []], out: undefined, timeout: 15000,
   })
   assert.throws(() => parseArgs(['--timeout', 'NaN']))
+  assert.throws(() => parseArgs(['--expect', 'h1']), /must follow --route/)
 })
 
 test('audits built pages in a real browser, retaining route-specific findings', async () => {

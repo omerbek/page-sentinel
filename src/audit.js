@@ -15,15 +15,22 @@ export function routeUrl(route, baseUrl) {
 }
 
 export function parseArgs(argv) {
-  const options = { root: '.', routes: [], out: undefined, timeout: 15000 }
+  const options = { root: '.', routes: [], expected: [], out: undefined, timeout: 15000 }
   let rootSet = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--help' || arg === '-h') return { help: true }
-    if (arg === '--route' || arg === '--out' || arg === '--timeout') {
+    if (arg === '--route' || arg === '--expect' || arg === '--out' || arg === '--timeout') {
       const value = argv[++i]
       if (!value || value.startsWith('--')) throw new Error(`${arg} needs a value`)
-      if (arg === '--route') options.routes.push(value)
+      if (arg === '--route') {
+        options.routes.push(value)
+        options.expected.push([])
+      }
+      if (arg === '--expect') {
+        if (!options.routes.length) throw new Error('--expect must follow --route')
+        options.expected.at(-1).push(value)
+      }
       if (arg === '--out') options.out = value
       if (arg === '--timeout') {
         const n = Number(value)
@@ -39,7 +46,10 @@ export function parseArgs(argv) {
       throw new Error(`Unexpected argument: ${arg}`)
     }
   }
-  if (!options.routes.length) options.routes.push('/')
+  if (!options.routes.length) {
+    options.routes.push('/')
+    options.expected.push([])
+  }
   const validationBase = new URL('http://127.0.0.1:1/')
   for (const route of options.routes) routeUrl(route, validationBase)
   return options
@@ -137,6 +147,16 @@ export async function audit(options, deps = { build, preview, chromium }) {
           if (sameOrigin(image, baseUrl.origin) &&
             !findings.some((finding) => finding.kind === 'asset' && finding.url === image)) {
             add('asset', image, 'Image did not decode')
+          }
+        }
+        for (const selector of options.expected?.[index] ?? []) {
+          try {
+            await page.locator(selector).first().waitFor({
+              state: 'visible',
+              timeout: options.timeout,
+            })
+          } catch {
+            add('assertion', url.href, `visible element not found: ${selector}`)
           }
         }
         await page.screenshot({ path: path.join(out, screenshot), timeout: options.timeout })

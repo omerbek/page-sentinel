@@ -3,9 +3,10 @@ import { audit, parseArgs } from '../src/audit.js'
 
 const usage = `Vite Route Sentinel — smoke-check a built Vite app in Chromium
 
-Usage: vite-route-sentinel [project-directory] [--route /path]... [--out directory] [--timeout ms]
+Usage: vite-route-sentinel [project-directory] [--route /path [--expect selector]...]... [--out directory] [--timeout ms]
 
 Routes are relative to the Vite base path. Default: /.
+Each --expect checks for a visible element on the preceding --route.
 Reports and screenshots default to <project-directory>/.route-sentinel/.
 Exit codes: 0 clean, 1 browser finding, 2 usage/build/browser failure.
 Run "npx playwright install chromium" once before the first audit.`
